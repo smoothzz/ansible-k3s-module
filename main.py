@@ -1,7 +1,11 @@
 import paramiko
+import secrets
 
-command = "curl -sfL https://get.k3s.io | sh -"
+token = secrets.token_hex(32)
+# print(token)
 
+command = f"curl -sfL https://get.k3s.io | sh -s --token {token}"
+print(command)
 # Update the next three lines with your
 # server's information
 

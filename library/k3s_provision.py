@@ -71,6 +71,7 @@ message:
 
 from ansible.module_utils.basic import AnsibleModule
 import paramiko
+import secrets
 
 class SSHClient:
     def __init__(self, hostname, username, password):
@@ -140,13 +141,15 @@ def run_module():
 
     if module.params['whatdo'] == 'provision':
 
+        token = secrets.token_hex(32)
         ssh_client = SSHClient(module.params['master_hosts'], module.params['username'], module.params['password'])
         ssh_client.connect()
-        output = ssh_client.execute_command('curl -sfL https://get.k3s.io | sh -')
+        output = ssh_client.execute_command(f'curl -sfL https://get.k3s.io | sh -s - --token {token}')
         print(output)
         ssh_client.close()
         result['changed'] = True
         result['k3s_state'] = 'Created'
+        result['token'] = f'{token}'
 
         # client = paramiko.client.SSHClient()
         # client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
