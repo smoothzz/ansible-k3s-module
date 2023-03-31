@@ -1,4 +1,4 @@
-!/usr/bin/python
+#!/usr/bin/python
 
 # Copyright: (c) 2018, Terry Jones <terry.jones@example.org>
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
@@ -72,17 +72,40 @@ message:
 from ansible.module_utils.basic import AnsibleModule
 import paramiko
 
+class SSHClient:
+    def __init__(self, hostname, username, password):
+        self.hostname = hostname
+        self.username = username
+        self.password = password
+        self.ssh = None
+    
+    def connect(self):
+        self.ssh = paramiko.SSHClient()
+        self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.ssh.connect(hostname=self.hostname, username=self.username, password=self.password)
+    
+    def execute_command(self, command):
+        stdin, stdout, stderr = self.ssh.exec_command(command)
+        output = stdout.read().decode('utf-8')
+        return output
+    
+    def close(self):
+        if self.ssh:
+            self.ssh.close()
 
 def run_module():
     # define available arguments/parameters a user can pass to the module
     module_args = dict(
-        cni=dict(type='str', required=False, default='calico'), #allowed values are calico, flannel
+        calico=dict(type='str', required=False),
         traefik=dict(type='bool', required=False, default=True),
         configure_host=dict(type='bool', required=False, default=False),
-        autoGen_token=dict(type='bool', required=False, default=True),
+        autoGen_token=dict(type='bool', required=False, default=False),
         master_hosts=dict(type='str', required=True),
-        node_hosts=dict(type='str', required=True),
-        servicelb=dict(type='bool', required=False, default=False),
+        username=dict(type='str', required=True),
+        password=dict(type='str', required=True),
+        node_hosts=dict(type='str', required=False),
+        servicelb=dict(type='bool', required=False, default=True),
+        whatdo=dict(type='str', required=False, default='provision')
     )
 
     # seed the result dict in the object
@@ -92,8 +115,7 @@ def run_module():
     # for consumption, for example, in a subsequent task
     result = dict(
         changed=False,
-        original_message='',
-        message=''
+        k3s_state=''
     )
     
     # the AnsibleModule object will be our abstraction working with Ansible
@@ -111,35 +133,45 @@ def run_module():
     if module.check_mode:
         module.exit_json(**result)
 
-    if module.params['provision']:
-        host = module.params['master_hosts']
-        username = module.params['username']
-        password = module.params['password']
+    # if len(module.params['master_hosts'].split(',')) >= 2:
 
-        client = paramiko.client.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(host, username=username, password=password)
-        _stdin, _stdout,_stderr = client.exec_command("curl -sfL https://get.k3s.io | sh -")
-        print(_stdout.read().decode())
-        client.close()
 
+
+
+    if module.params['whatdo'] == 'provision':
+
+        ssh_client = SSHClient(module.params['master_hosts'], module.params['username'], module.params['password'])
+        ssh_client.connect()
+        output = ssh_client.execute_command('curl -sfL https://get.k3s.io | sh -')
+        print(output)
+        ssh_client.close()
         result['changed'] = True
+        result['k3s_state'] = 'Created'
 
-    # manipulate or modify the state as needed (this is going to be the
-    # part where your module will do what it needs to do)
-    result['original_message'] = module.params['name']
-    result['message'] = 'goodbye'
+        # client = paramiko.client.SSHClient()
+        # client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        # client.connect(m_hosts, username=username, password=password)
+        # _stdin, _stdout,_stderr = client.exec_command("if [[ $(ps -ef | grep -c k3s)  -ne 1 ]]; then echo 'found'; else echo 'not found'; fi")
+        # checkStatus = print(_stdout.read().decode())
+        # if checkStatus == 'found':
+        #     result['changed'] = False
+        #     result['k3s_state'] = 'Already provisioned'
+        #     client.close()
+        # else:
+        #     _stdin, _stdout,_stderr = client.exec_command("curl -sfL https://get.k3s.io | sh -")
+        #     print(_stdout.read().decode())
+        #     client.close()
+        #     result['changed'] = True
+        #     result['k3s_state'] = 'Created'
 
-    # use whatever logic you need to determine whether or not this module
-    # made any modifications to your target
-    if module.params['new']:
+    if module.params['whatdo'] == 'destroy':
+        ssh_client = SSHClient(module.params['master_hosts'], module.params['username'], module.params['password'])
+        ssh_client.connect()
+        output = ssh_client.execute_command('sudo k3s-uninstall.sh')
+        print(output)
+        ssh_client.close()
         result['changed'] = True
-
-    # during the execution of the module, if there is an exception or a
-    # conditional state that effectively causes a failure, run
-    # AnsibleModule.fail_json() to pass in the message and the result
-    if module.params['name'] == 'fail me':
-        module.fail_json(msg='You requested this to fail', **result)
+        result['k3s_state'] = 'Destroyed'
 
     # in the event of a successful module execution, you will want to
     # simple AnsibleModule.exit_json(), passing the key/value results
