@@ -1,43 +1,46 @@
 import paramiko
-import secrets
 
-token = secrets.token_hex(32)
-# print(token)
+class SSHClient:
+    def __init__(self, hostname, username, password):
+        self.hostname = hostname
+        self.username = username
+        self.password = password
+        self.ssh = None
+    
+    def connect(self):
+        self.ssh = paramiko.SSHClient()
+        self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.ssh.connect(hostname=self.hostname, username=self.username, password=self.password)
+    
+    def execute_command(self, command):
+        stdin, stdout, stderr = self.ssh.exec_command(command)
+        output = stdout.read().decode('utf-8')
+        k3sproc = stdout.channel.recv_exit_status()
+        return output, k3sproc
+    
+    def close(self):
+        if self.ssh:
+            self.ssh.close()
 
-command = f"curl -sfL https://get.k3s.io | sh -s --token {token}"
-print(command)
-# Update the next three lines with your
-# server's information
+mhosts = '192.168.0.146,192.168.0.160'
 
-host = "192.168.0.146,192.168.0.50,192.168.0.60,192.168.0.70,192.168.0.80,192.168.0.90,192.168.0.100,192.168.0.146,192.168.0.146"
-username = "aya"
-password = "123456"
-
-master = host.split(',')
-teste = host.split(',')[0]
-teste2 = host.split(',')[1:]
-count = len(master)
-
-for i in host.split(',')[1:]:
-    print(i)
-
-# if len(host.split(',')) >= 2:
-#     print('maior que ou igual a 2')
-# else:
-#     print('menor que 2')
-
-# print(count)
-
-# client = paramiko.client.SSHClient()
-# client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-# client.connect(host, username=username, password=password)
-# command = "pgrep -x 'k3s'"
-# _stdin, _stdout,_stderr = client.exec_command(command)
-# output = _stdout.read().decode()
-# if output.strip():  # If the output is not empty
-#     # The process is running
-#     print("The process is running")
-# else:
-#     # The process is not running
-#     print("The process is not running")
-# client.close()
+for i in mhosts:
+    ssh_client = SSHClient(i, username, password)
+    ssh_client.connect()
+    k3sproc = ssh_client.execute_command('pgrep -l k3s | wc -l', timeout=5)
+    k3status = k3sproc.readlines()
+    num_processes = int(k3status[0])
+    if num_processes == 1:
+        output = ssh_client.execute_command('sudo k3s-uninstall.sh')
+        print(output)
+        ssh_client.close()
+    else:
+        continue
+# for i in whosts:
+#     ssh_client = SSHClient(i, username, password)
+#     ssh_client.connect()
+#     output = ssh_client.execute_command('sudo k3s-agent-uninstall.sh')
+#     print(output)
+#     ssh_client.close()
+# result['changed'] = True
+# result['k3s_state'] = 'Destroyed'
