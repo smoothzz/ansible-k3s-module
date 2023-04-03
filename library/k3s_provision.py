@@ -106,7 +106,7 @@ def run_module():
         master_hosts=dict(type='str', required=False),
         username=dict(type='str', required=True),
         password=dict(type='str', required=True),
-        worker_hosts=dict(type='str', required=False),
+        worker_hosts=dict(type='str', required=False, default=''),
         servicelb=dict(type='bool', required=False, default=True),
         whatdo=dict(type='str', required=False, default='provision')
     )
@@ -144,7 +144,7 @@ def run_module():
     password = module.params['password']
 
     if module.params['whatdo'] == 'provision':
-        look_k3s = mhosts + ',' + whosts
+        look_k3s = mhosts + (',' if (mhosts and whosts) else '') + whosts
         for i in look_k3s.split(','):
             ssh_client = SSHClient(i, username, password)
             ssh_client.connect()
@@ -152,6 +152,15 @@ def run_module():
             num_processes = int(k3sproc[0])
             if num_processes == 1:
                 module.fail_json(msg=f'Host {i} has service k3s up, fix and restart the process.', **result)
+        if not whosts and len(mhosts.split(',')) == 1:
+            ssh_client = SSHClient(mhosts.split(',')[0], username, password)
+            ssh_client.connect()
+            output = ssh_client.execute_command(f'curl -sfL https://get.k3s.io | sh -s - --token {token}')
+            print(output)
+            ssh_client.close()
+            result['changed'] = True
+            result['k3s_state'] = 'Created'
+            result['token'] = f'{token}'
         if whosts and len(mhosts.split(',')) == 1:
             ssh_client = SSHClient(mhosts.split(',')[0], username, password)
             ssh_client.connect()
@@ -183,13 +192,15 @@ def run_module():
                 ssh_client = SSHClient(i, username, password)
                 ssh_client.connect()
                 output = ssh_client.execute_command(f'curl -sfL https://get.k3s.io | sh -s - agent --token {token} --server https://{first_master}:6443')
+                ssh_client.execute_command('sudo ln -s /usr/local/bin/k3s-agent-uninstall.sh /usr/local/bin/k3s-uninstall.sh')                
                 ssh_client.close()
             result['changed'] = True
             result['k3s_state'] = 'Created'
             result['token'] = f'{token}'
 
     if module.params['whatdo'] == 'destroy':
-        for i in mhosts.split(','):
+        look_k3s = mhosts + (',' if (mhosts and whosts) else '') + whosts
+        for i in look_k3s.split(','):
             ssh_client = SSHClient(i, username, password)
             ssh_client.connect()
             k3sproc = ssh_client.execute_command('pgrep -l k3s | wc -l')
@@ -198,17 +209,9 @@ def run_module():
                 output = ssh_client.execute_command('sudo k3s-uninstall.sh')
                 print(output)
                 ssh_client.close()
-            else:
-                continue
-        for i in whosts.split(','):
-            ssh_client = SSHClient(i, username, password)
-            ssh_client.connect()
-            output = ssh_client.execute_command('sudo k3s-agent-uninstall.sh')
-            print(output)
-            ssh_client.close()
         result['changed'] = True
         result['k3s_state'] = 'Destroyed'
-
+        
     module.exit_json(**result)
 
 

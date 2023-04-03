@@ -1,9 +1,8 @@
 import paramiko
 
-aa = "192.168.0.100,192.168.0.200"
-bb = "192.168.0.300,192.168.0.400"
-
-cc = aa + ',' + bb
+aa = ""
+bb = "192.168.0.300"
+cc = aa + (',' if (aa and bb) else '') + bb
 print(cc)
 
 # class SSHClient:
