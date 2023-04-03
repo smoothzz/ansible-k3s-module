@@ -72,6 +72,7 @@ message:
 from ansible.module_utils.basic import AnsibleModule
 import paramiko
 import secrets
+from multiprocessing import Pool
 
 class SSHClient:
     def __init__(self, hostname, username, password):
@@ -88,9 +89,9 @@ class SSHClient:
     def execute_command(self, command):
         stdin, stdout, stderr = self.ssh.exec_command(command)
         output = stdout.read().decode('utf-8')
-        k3sproc = stdout.channel.recv_exit_status()
-        return output, k3sproc
-    
+        # k3sproc = stdout.channel.recv_exit_status()
+        return output
+    # k3sproc    
     def close(self):
         if self.ssh:
             self.ssh.close()
@@ -143,6 +144,14 @@ def run_module():
     password = module.params['password']
 
     if module.params['whatdo'] == 'provision':
+        look_k3s = mhosts + ',' + whosts
+        for i in look_k3s.split(','):
+            ssh_client = SSHClient(i, username, password)
+            ssh_client.connect()
+            k3sproc = ssh_client.execute_command('pgrep -l k3s | wc -l')
+            num_processes = int(k3sproc[0])
+            if num_processes == 1:
+                module.fail_json(msg=f'Host {i} has service k3s up, fix and restart the process.', **result)
         if whosts and len(mhosts.split(',')) == 1:
             ssh_client = SSHClient(mhosts.split(',')[0], username, password)
             ssh_client.connect()
@@ -200,8 +209,6 @@ def run_module():
         result['changed'] = True
         result['k3s_state'] = 'Destroyed'
 
-    # in the event of a successful module execution, you will want to
-    # simple AnsibleModule.exit_json(), passing the key/value results
     module.exit_json(**result)
 
 
