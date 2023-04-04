@@ -1,33 +1,35 @@
 import paramiko
 
-aa = ""
-bb = "192.168.0.300"
-cc = aa + (',' if (aa and bb) else '') + bb
-print(cc)
+# aa = ""
+# bb = "192.168.0.300"
+# cc = aa + (',' if (aa and bb) else '') + bb
+# print(cc)
 
-# class SSHClient:
-#     def __init__(self, hostname, username, password):
-#         self.hostname = hostname
-#         self.username = username
-#         self.password = password
-#         self.ssh = None
+class SSHClient:
+    def __init__(self, hostname, username, password):
+        self.hostname = hostname
+        self.username = username
+        self.password = password
+        self.ssh = None
     
-#     def connect(self):
-#         self.ssh = paramiko.SSHClient()
-#         self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-#         self.ssh.connect(hostname=self.hostname, username=self.username, password=self.password)
+    def connect(self):
+        self.ssh = paramiko.SSHClient()
+        self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.ssh.connect(hostname=self.hostname, username=self.username, password=self.password)
     
-#     def execute_command(self, command):
-#         stdin, stdout, stderr = self.ssh.exec_command(command)
-#         output = stdout.read().decode('utf-8')
-#         k3sproc = stdout.channel.recv_exit_status()
-#         return output, k3sproc
+    def execute_command(self, command):
+        stdin, stdout, stderr = self.ssh.exec_command(command)
+        output = stdout.read().decode('utf-8')
+        # k3sproc = stdout.channel.recv_exit_status()
+        return output
+    # k3sproc
     
-#     def close(self):
-#         if self.ssh:
-#             self.ssh.close()
-
-# mhosts = '192.168.0.146,192.168.0.160'
+    def close(self):
+        if self.ssh:
+            self.ssh.close()
+username = 'aya'
+password = '123456'
+hosts = '192.168.0.146'
 
 # for i in mhosts:
 #     ssh_client = SSHClient(i, username, password)
@@ -49,3 +51,9 @@ print(cc)
 # #     ssh_client.close()
 # # result['changed'] = True
 # # result['k3s_state'] = 'Destroyed'
+
+ssh_client = SSHClient(hosts, username, password)
+ssh_client.connect()
+output = ssh_client.execute_command('nodes=$(sudo k3s kubectl get nodes -o jsonpath="{.items[*].status.addresses[].address}") && echo ${nodes// /,}')
+print(output)
+ssh_client.close()

@@ -108,7 +108,8 @@ def run_module():
         password=dict(type='str', required=True),
         worker_hosts=dict(type='str', required=False, default=''),
         servicelb=dict(type='bool', required=False, default=True),
-        whatdo=dict(type='str', required=False, default='provision')
+        whatdo=dict(type='str', required=False, default='provision'),
+        autoDestroy=dict(type='str', required=False)
     )
 
     # seed the result dict in the object
@@ -142,6 +143,7 @@ def run_module():
     whosts = module.params['worker_hosts']
     username = module.params['username']
     password = module.params['password']
+    autoRemove = module.params['autoDestroy']
 
     if module.params['whatdo'] == 'provision':
         look_k3s = mhosts + (',' if (mhosts and whosts) else '') + whosts
@@ -199,8 +201,22 @@ def run_module():
             result['token'] = f'{token}'
 
     if module.params['whatdo'] == 'destroy':
-        look_k3s = mhosts + (',' if (mhosts and whosts) else '') + whosts
-        for i in look_k3s.split(','):
+        # look_k3s = mhosts + (',' if (mhosts and whosts) else '') + whosts
+        # for i in look_k3s.split(','):
+        #     ssh_client = SSHClient(i, username, password)
+        #     ssh_client.connect()
+        #     k3sproc = ssh_client.execute_command('pgrep -l k3s | wc -l')
+        #     num_processes = int(k3sproc[0])
+        #     if num_processes == 1:
+        #         output = ssh_client.execute_command('sudo k3s-uninstall.sh')
+        #         print(output)
+        #         ssh_client.close()
+        ssh_client = SSHClient(autoRemove, username, password)
+        ssh_client.connect()
+        output = ssh_client.execute_command('nodes=$(sudo k3s kubectl get nodes -o jsonpath="{.items[*].status.addresses[].address}") && echo ${nodes// /,}')
+        print(output)
+        ssh_client.close()
+        for i in output.split(','):
             ssh_client = SSHClient(i, username, password)
             ssh_client.connect()
             k3sproc = ssh_client.execute_command('pgrep -l k3s | wc -l')
