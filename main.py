@@ -31,6 +31,8 @@ username = 'aya'
 password = '123456'
 hosts = '192.168.0.146'
 
+print(hosts.split(',')[::-1])
+
 # for i in mhosts:
 #     ssh_client = SSHClient(i, username, password)
 #     ssh_client.connect()
@@ -54,6 +56,8 @@ hosts = '192.168.0.146'
 
 ssh_client = SSHClient(hosts, username, password)
 ssh_client.connect()
-output = ssh_client.execute_command('nodes=$(sudo k3s kubectl get nodes -o jsonpath="{.items[*].status.addresses[].address}") && echo ${nodes// /,}')
-print(output)
+master = ssh_client.execute_command('nodes=$(sudo k3s kubectl get nodes -o jsonpath="{.items[*].status.addresses[].address}") && echo ${nodes// /,}')
+# print(master.strip())
+print(master.strip().split(',')[::-1])
+
 ssh_client.close()

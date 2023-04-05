@@ -89,7 +89,6 @@ class SSHClient:
     def execute_command(self, command):
         stdin, stdout, stderr = self.ssh.exec_command(command)
         output = stdout.read().decode('utf-8')
-        # k3sproc = stdout.channel.recv_exit_status()
         return output
     # k3sproc    
     def close(self):
@@ -109,7 +108,8 @@ def run_module():
         worker_hosts=dict(type='str', required=False, default=''),
         servicelb=dict(type='bool', required=False, default=True),
         whatdo=dict(type='str', required=False, default='provision'),
-        autoDestroy=dict(type='str', required=False)
+        auto_destroy=dict(type='str', required=False),
+        remove_node=dict(type='str', required=False)
     )
 
     # seed the result dict in the object
@@ -118,8 +118,7 @@ def run_module():
     # state will include any data that you want your module to pass back
     # for consumption, for example, in a subsequent task
     result = dict(
-        changed=False,
-        k3s_state=''
+        changed=False
     )
     
     # the AnsibleModule object will be our abstraction working with Ansible
@@ -143,7 +142,8 @@ def run_module():
     whosts = module.params['worker_hosts']
     username = module.params['username']
     password = module.params['password']
-    autoRemove = module.params['autoDestroy']
+    auto_destroy = module.params['auto_destroy']
+    remove_node = module.params['remove_node']
 
     if module.params['whatdo'] == 'provision':
         look_k3s = mhosts + (',' if (mhosts and whosts) else '') + whosts
@@ -201,32 +201,48 @@ def run_module():
             result['token'] = f'{token}'
 
     if module.params['whatdo'] == 'destroy':
-        # look_k3s = mhosts + (',' if (mhosts and whosts) else '') + whosts
-        # for i in look_k3s.split(','):
-        #     ssh_client = SSHClient(i, username, password)
-        #     ssh_client.connect()
-        #     k3sproc = ssh_client.execute_command('pgrep -l k3s | wc -l')
-        #     num_processes = int(k3sproc[0])
-        #     if num_processes == 1:
-        #         output = ssh_client.execute_command('sudo k3s-uninstall.sh')
-        #         print(output)
-        #         ssh_client.close()
-        ssh_client = SSHClient(autoRemove, username, password)
-        ssh_client.connect()
-        output = ssh_client.execute_command('nodes=$(sudo k3s kubectl get nodes -o jsonpath="{.items[*].status.addresses[].address}") && echo ${nodes// /,}')
-        print(output)
-        ssh_client.close()
-        for i in output.split(','):
-            ssh_client = SSHClient(i, username, password)
+        if remove_node:
+            ssh_client = SSHClient(remove_node.split(',')[0], username, password)
             ssh_client.connect()
-            k3sproc = ssh_client.execute_command('pgrep -l k3s | wc -l')
-            num_processes = int(k3sproc[0])
-            if num_processes == 1:
-                output = ssh_client.execute_command('sudo k3s-uninstall.sh')
-                print(output)
-                ssh_client.close()
-        result['changed'] = True
-        result['k3s_state'] = 'Destroyed'
+            master = ssh_client.execute_command('sudo grep -i  "6443" /etc/systemd/system/k3s-agent.service | cut -d "/" -f3 | cut -d ":" -f1')
+            print(master)
+            ssh_client.connect()
+            for i in remove_node.split(','):
+                ssh_client = SSHClient(i, username, password)
+                ssh_client.connect()
+                k3sproc = ssh_client.execute_command('pgrep -l k3s | wc -l')
+                hostname = ssh_client.execute_command('hostname')
+                num_processes = int(k3sproc[0])
+                if num_processes == 1:
+                    output = ssh_client.execute_command('sudo k3s-uninstall.sh')
+                    print(output)
+                    ssh_client.close()
+                    ssh_client = SSHClient(master.strip(), username, password)
+                    ssh_client.connect()
+                    cmdexec = ssh_client.execute_command(f'sudo k3s kubectl delete node {hostname}')
+                    print(cmdexec)
+                    ssh_client.close()
+                else:
+                    continue
+            result['changed'] = True
+            result['node_state'] = 'Removed'            
+        else:
+            ssh_client = SSHClient(auto_destroy, username, password)
+            ssh_client.connect()
+            output = ssh_client.execute_command('nodes=$(sudo k3s kubectl get nodes -o jsonpath="{.items[*].status.addresses[].address}") && echo ${nodes// /,}')
+            print(output)
+            ssh_client.close()
+            for i in output.strip().split(',')[::-1]:
+                ssh_client = SSHClient(i, username, password)
+                ssh_client.connect()
+                k3sproc = ssh_client.execute_command('pgrep -l k3s | wc -l')
+                num_processes = int(k3sproc[0])
+                if num_processes == 1:
+                    output = ssh_client.execute_command('sudo k3s-uninstall.sh')
+                    print(output)
+                    ssh_client.close()
+            result['changed'] = True
+            result['k3s_state'] = 'Destroyed'
         
     module.exit_json(**result)
 
